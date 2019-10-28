@@ -38,12 +38,13 @@ def encoder(source_tensor, encoder_state, vocab_size, embed_size, units, activat
     x, h3, c3 = lstm_func_with_init_3(x, initial_state=encoder_state[2])
     x, h4, c4 = lstm_func_with_init_4(x, initial_state=encoder_state[3])
     return_state = [[h1, c1], [h2, c2], [h3, c3], [h4, c4]]
-    train_layer_var = [embed_func, lstm_func_with_init_1, lstm_func_with_init_2, lstm_func_with_init_3, lstm_func_with_init_4]
+    train_layer_var = [embed_func, lstm_func_with_init_1, lstm_func_with_init_2,
+                       lstm_func_with_init_3, lstm_func_with_init_4]
     trainable_var = []
     for layer_name in train_layer_var:
         # assume that layer_name.trainable_weights is a instance of list
         trainable_var += layer_name.trainable_weights
-    return x,return_state
+    return x, return_state, trainable_var
 
 
 def decoder(target_tensor, state, out, attention_state, vocab_size, embed_size, units, activation, dropout_rate):
@@ -69,10 +70,6 @@ def decoder(target_tensor, state, out, attention_state, vocab_size, embed_size, 
                                      return_sequences=True, return_state=True)
 
     x, h1, c1 = lstm_func_with_init_1(x, initial_state=state[0])
-    # tf.print(state[0][0].shape)
-    # tf.print(state[0][1].shape)
-    # tf.print(state[1][0].shape)
-    # tf.print(state[1][0].shape)
     x, h2, c2 = lstm_func_with_init_2(x, initial_state=state[1])
     x, h3, c3 = lstm_func_with_init_3(x, initial_state=state[2])
     x, h4, c4 = lstm_func_with_init_4(x, initial_state=state[3])
@@ -92,7 +89,13 @@ def decoder(target_tensor, state, out, attention_state, vocab_size, embed_size, 
     hidden_state = hidden_state_dense(hidden_state)
     output_state = output_state_dense(hidden_state)
     output_state = tf.squeeze(output_state, axis=1)
-    return output_state, return_state, hidden_state
+    train_layer_var = [embed_func, lstm_func_with_init_1, lstm_func_with_init_2, lstm_func_with_init_3,
+                       lstm_func_with_init_4, hidden_state_dense, output_state_dense]
+    trainable_var = []
+    for layer_name in train_layer_var:
+        # assume that layer_name.trainable_weights is a instance of list
+        trainable_var += layer_name.trainable_weights
+    return output_state, return_state, hidden_state, trainable_var
 
 
 

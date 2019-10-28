@@ -85,32 +85,43 @@ def train():
         for idx, data in enumerate( dataset.take(training_steps)):
             start = time.time()
             source, target = data
-            source_out, source_state = encoder(source, encoder_state, vocab_source_size, EMBED_DIM, NUM_UNITS, activation="tanh", dropout_rate = DROPOUT)
-            initial = tf.expand_dims([train_target_tokenizer.word_index[start_word]] * BATCH_SIZE, 1)
-            attention_state = tf.zeros((BATCH_SIZE, 1, EMBED_DIM))
-            # cur_total_loss is a sum of loss for current steps, namely batch loss
-            cur_total_loss, cur_loss = 0, 0
-            for i in range(target.shape[1]):
-                output_state, return_state, hidden_state = decoder(initial, source_state, source_out, attention_state, vocab_target_size, EMBED_DIM, NUM_UNITS, activation="tanh", dropout_rate = DROPOUT)
-                # TODO: check for the case where target is 0
-                cur_loss = apply_loss(target[:,i], output_state)
-                # 0 should be the padding value in target.
-                # I assumed that there should not be 0 value in target
-                # for safety reason, we apply this mask to final loss
-                # Mask is a array contains binary value(0 or 1)
-                mask = tf.cast(tf.math.logical_not(tf.math.equal(target[:,i],0)), dtype=cur_loss.dtype)
-                cur_loss *= mask
-                cur_total_loss += cur_loss
-                initial = tf.expand_dims(target[:,i], 1)
-            cur_total_loss /= target.shape[1]
-            optimizer.minimize(cur_total_loss)
+            with tf.GradientTape() as tape:
+                source_out, source_state, source_var = encoder(source, encoder_state, vocab_source_size,
+                                                   EMBED_DIM, NUM_UNITS, activation="tanh", dropout_rate = DROPOUT)
+                initial = tf.expand_dims([train_target_tokenizer.word_index[start_word]] * BATCH_SIZE, 1)
+                attention_state = tf.zeros((BATCH_SIZE, 1, EMBED_DIM))
+                # cur_total_loss is a sum of loss for current steps, namely batch loss
+                cur_total_loss, cur_loss = 0, 0
+                for i in range(target.shape[1]):
+                    output_state, return_state, hidden_state, decode_var = decoder(initial, source_state, source_out,
+                                                   attention_state, vocab_target_size, EMBED_DIM, NUM_UNITS,
+                                                   activation="tanh", dropout_rate = DROPOUT)
+                    # TODO: check for the case where target is 0
+                    cur_loss = apply_loss(target[:,i], output_state)
+                    # 0 should be the padding value in target.
+                    # I assumed that there should not be 0 value in target
+                    # for safety reason, we apply this mask to final loss
+                    # Mask is a array contains binary value(0 or 1)
+                    mask = tf.cast(tf.math.logical_not(tf.math.equal(target[:,i],0)), dtype=cur_loss.dtype)
+                    cur_loss *= mask
+                    cur_total_loss += tf.reduce_mean(cur_loss)
+                    initial = tf.expand_dims(target[:,i], 1)
+                batch_loss = cur_total_loss / target.shape[1]
+                # compute loss
+                variables = source_var + decode_var
+                print("check variable: ", len(variables), variables)
+
+                gradients = tape.gradient(cur_total_loss, variables)
+                print("check gradient: ", len(gradients), gradients)
+                optimizer.apply_gradients(zip(gradients, variables))
+                # end
             per_epoch_loss += cur_total_loss
             if idx % 10 == 0:
                 print('Epoch {}/{} Batch {}/{} Loss {:.4f}'.format(epoch + 1,
                                                                    EPOCH,
                                                                    idx + 10,
                                                                    training_steps,
-                                                                   cur_total_loss.numpy()))
+                                                                   batch_loss.numpy()))
 
 
         print('Epoch {}/{} Total Loss per epoch {:.4f} - {} sec'.format(epoch + 1,
